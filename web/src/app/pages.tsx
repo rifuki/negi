@@ -1,6 +1,6 @@
 // The pages the router shows. Route definitions live in router.tsx.
 
-import { ArrowClockwiseIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, CaretLeftIcon, PlusIcon } from "@phosphor-icons/react";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { Link } from "@/connection/Socket";
@@ -8,6 +8,7 @@ import { List } from "@/features/sessions/List";
 import { PaneView } from "@/features/pane/PaneView";
 import { Sheets } from "@/features/sheets";
 import { State } from "@/components/State";
+import { Tip } from "@/components/Tip";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -77,6 +78,8 @@ export function AppPage() {
   const sessions = useApp((s) => s.sessions);
   const blocker = useBlocker();
   const sidebar = useApp((s) => s.sidebar);
+  const prefixKeys = useApp((s) => s.prefixKeys);
+  const toggleSidebar = useApp((s) => s.toggleSidebar);
   // Hidden only beside an open pane; with nothing open the list is the page.
   const tucked = Boolean(open) && !sidebar;
 
@@ -91,7 +94,7 @@ export function AppPage() {
 
   if (blocker) return <main className="h-full">{blocker}</main>;
   return (
-    <main className="flex h-full">
+    <main className="relative flex h-full">
       <div
         aria-hidden={tucked || undefined}
         inert={tucked || undefined}
@@ -106,6 +109,24 @@ export function AppPage() {
           <List open={open} />
         </div>
       </div>
+      {open && (
+        // A handle on the line between the list and the pane, at its middle; with the list
+        // hidden it waits at the screen's edge to bring it back.
+        <Tip label={sidebar ? "Hide sessions" : "Show sessions"} hint={prefixKeys ? "Ctrl+B, then s" : undefined} side="right">
+          <button
+            type="button"
+            aria-label={sidebar ? "Hide the session list" : "Show the session list"}
+            aria-expanded={sidebar}
+            onClick={toggleSidebar}
+            data-tucked={tucked || undefined}
+            className="sidebar-handle group absolute top-1/2 z-20 hidden h-24 w-6 -translate-y-1/2 place-items-center outline-none lg:grid"
+          >
+            <span className="grid h-12 w-1.5 place-items-center overflow-hidden rounded-full bg-border transition-all duration-300 ease-spring group-hover:h-16 group-hover:w-6 group-hover:bg-card group-hover:shadow-[0_4px_16px_rgb(0_0_0/0.18)] group-hover:ring-1 group-hover:ring-border group-focus-visible:h-16 group-focus-visible:w-6 group-focus-visible:bg-card group-focus-visible:ring-2 group-focus-visible:ring-ring">
+              <CaretLeftIcon weight="bold" size={14} className="sidebar-caret opacity-0 transition-[opacity,rotate] duration-300 group-hover:opacity-100 group-focus-visible:opacity-100" />
+            </span>
+          </button>
+        </Tip>
+      )}
       {open ? (
         <PaneView pane={open} />
       ) : (

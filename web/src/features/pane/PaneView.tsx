@@ -1,6 +1,6 @@
 // An open pane: its header, the windows of its session, the terminal, the keys.
 
-import { ArrowsOutIcon, CaretLeftIcon, SidebarSimpleIcon, DotsThreeIcon, FolderIcon, type Icon, PlusIcon, StackIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowsOutIcon, CaretLeftIcon, DotsThreeIcon, FolderIcon, type Icon, PlusIcon, StackIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -49,9 +49,6 @@ export function PaneView({ pane }: { pane: string }) {
   const openSheet = useApp((s) => s.openSheet);
   const soft = useKeyboard((s) => s.soft);
   const ask = useAsk();
-  const sidebar = useApp((s) => s.sidebar);
-  const toggleSidebar = useApp((s) => s.toggleSidebar);
-  const prefixKeys = useApp((s) => s.prefixKeys);
   const armed = usePrefix((s) => s.armed);
   // The pane last seen in the tree, and whose it was.
   const listed = useRef<{ pane: string; session: string; name: string } | null>(null);
@@ -107,11 +104,6 @@ export function PaneView({ pane }: { pane: string }) {
           className="relative before:absolute before:-top-3 before:right-0 before:-bottom-2 before:-left-3 lg:hidden" onClick={() => navigate({ to: "/", viewTransition: true })}>
           <CaretLeftIcon weight="bold" size={20} />
         </Button>
-        <Tip label={sidebar ? "Hide sessions" : "Show sessions"} hint={prefixKeys ? "Ctrl+B, then s" : undefined} side="bottom">
-          <Button variant="soft" size="icon" aria-label={sidebar ? "Hide the session list" : "Show the session list"} aria-pressed={!sidebar} className="hidden lg:inline-flex" onClick={toggleSidebar}>
-            <SidebarSimpleIcon weight={sidebar ? "bold" : "fill"} size={20} />
-          </Button>
-        </Tip>
         {where && <Tile icon={programIcon(where.pane.command)} tone="accent" seed={where.session.name} className="land:hidden" />}
         <div className="min-w-0 flex-1 px-1">
           {/* The page's one h1 is the session list's; this names a part of it. */}

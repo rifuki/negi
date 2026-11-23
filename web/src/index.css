@@ -582,6 +582,17 @@
       transform 360ms cubic-bezier(0.32, 0.72, 0, 1),
       opacity 240ms;
   }
+  /* Centred on the list's border, and on the screen's edge once the list is hidden. */
+  .sidebar-handle {
+    left: calc(400px - 0.75rem);
+    transition: left 360ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .sidebar-handle[data-tucked] {
+    left: 0.125rem;
+  }
+  .sidebar-handle[data-tucked] .sidebar-caret {
+    rotate: 180deg;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
