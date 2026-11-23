@@ -85,11 +85,13 @@ export function PaneView({ pane }: { pane: string }) {
 
   // The pane a press asked for, until it shows: the chip answers at once. No view transition,
   // which would hold the page still and read as a press not heard.
-  const [asking, setAsking] = useState<string | null>(null);
-  // Once the pane shown is the one asked for, the asking is over.
-  const asked = asking === pane ? null : asking;
+  // An ask ends as soon as any pane other than the one it was made from is shown: the one
+  // asked for, or one reached from the list or the keyboard. Coming back must not revive it.
+  const [asking, setAsking] = useState<{ from: string; to: string } | null>(null);
+  if (asking && asking.from !== pane) setAsking(null);
+  const asked = asking && asking.from === pane ? asking.to : null;
   const go = (id: string) => {
-    setAsking(id);
+    setAsking({ from: pane, to: id });
     return navigate({ to: "/pane/$pane", params: { pane: paneParam(id) } });
   };
   const shown = asked ?? pane;
