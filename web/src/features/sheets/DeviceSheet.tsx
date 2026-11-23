@@ -41,6 +41,8 @@ export function DeviceSheet() {
   const character = useApp((s) => s.character);
   const motion = useApp((s) => s.motion);
   const setMotion = useApp((s) => s.setMotion);
+  const prefixKeys = useApp((s) => s.prefixKeys);
+  const setPrefixKeys = useApp((s) => s.setPrefixKeys);
   const setCharacter = useApp((s) => s.setCharacter);
   const theme = useApp((s) => s.theme);
   const accent = useApp((s) => s.accent);
@@ -104,6 +106,9 @@ export function DeviceSheet() {
             </Line>
             <Line label="Animations" sub={motion ? "She blinks and waves" : "Everything holds still"}>
               <Switch label="Animations" checked={motion} onChange={setMotion} className="mr-1" />
+            </Line>
+            <Line label="tmux keys" sub={prefixKeys ? "Ctrl+B, then a key, as in tmux. ? lists them" : "Ctrl+B goes to the program"}>
+              <Switch label="tmux keys" checked={prefixKeys} onChange={setPrefixKeys} className="mr-1" />
             </Line>
           </Card>
 

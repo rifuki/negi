@@ -76,6 +76,9 @@ export function AppPage() {
   const open = params.pane ? paneId(params.pane) : null;
   const sessions = useApp((s) => s.sessions);
   const blocker = useBlocker();
+  const sidebar = useApp((s) => s.sidebar);
+  // Hidden only beside an open pane; with nothing open the list is the page.
+  const tucked = Boolean(open) && !sidebar;
 
   // One pane per session is watched as a preview, and the open pane as open.
   const last = useApp((s) => s.last);
@@ -89,8 +92,19 @@ export function AppPage() {
   if (blocker) return <main className="h-full">{blocker}</main>;
   return (
     <main className="flex h-full">
-      <div className={cn("h-full w-full shrink-0 lg:block lg:w-[400px] lg:border-r", open && "hidden")}>
-        <List open={open} />
+      <div
+        aria-hidden={tucked || undefined}
+        inert={tucked || undefined}
+        className={cn(
+          "sidebar h-full w-full shrink-0 lg:block lg:w-[400px] lg:overflow-hidden lg:border-r",
+          open && "hidden",
+          tucked && "lg:w-0 lg:border-r-0",
+        )}
+      >
+        {/* The list keeps its width while the column narrows, so it slides away whole. */}
+        <div className={cn("h-full lg:w-[400px]", tucked && "lg:-translate-x-8 lg:opacity-0")}>
+          <List open={open} />
+        </div>
       </div>
       {open ? (
         <PaneView pane={open} />

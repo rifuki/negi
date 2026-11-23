@@ -30,6 +30,10 @@ interface AppState {
   accent: "miku" | "aqua" | "sky" | "sakura";
   /** Which drawing looks over the summary card; an id from `lib/characters`. */
   character: string;
+  /** On a wide screen, whether the session list stays beside an open pane. */
+  sidebar: boolean;
+  /** Whether Ctrl+B, as in tmux, starts a negi command instead of reaching the program. */
+  prefixKeys: boolean;
 
   /** connecting: no answer yet. ready: talking. lost: the socket dropped and is retried. */
   phase: "connecting" | "ready" | "lost";
@@ -65,6 +69,8 @@ interface AppState {
   setView: (view: AppState["view"]) => void;
   setAccent: (accent: AppState["accent"]) => void;
   setCharacter: (character: string) => void;
+  toggleSidebar: () => void;
+  setPrefixKeys: (on: boolean) => void;
 }
 
 // Storage can be unavailable (private mode); the app then asks to pair on each visit.
@@ -103,6 +109,8 @@ export const useApp = create<AppState>()(
       view: "screen",
       accent: "miku",
       character: "miku",
+      sidebar: true,
+      prefixKeys: true,
       phase: "connecting",
       greeted: 0,
       problem: "",
@@ -125,6 +133,8 @@ export const useApp = create<AppState>()(
       setView: (view) => set({ view }),
       setAccent: (accent) => set({ accent }),
       setCharacter: (character) => set({ character }),
+      toggleSidebar: () => set((s) => ({ sidebar: !s.sidebar })),
+      setPrefixKeys: (prefixKeys) => set({ prefixKeys }),
     }),
     {
       name: "negi",
@@ -136,7 +146,7 @@ export const useApp = create<AppState>()(
         if (state.view !== "screen" && state.view !== "fit") state.view = "screen";
         return state;
       },
-      partialize: (state) => ({ token: state.token, zoom: state.zoom, theme: state.theme, motion: state.motion, last: state.last, view: state.view, accent: state.accent, character: state.character }),
+      partialize: (state) => ({ token: state.token, zoom: state.zoom, theme: state.theme, motion: state.motion, last: state.last, view: state.view, accent: state.accent, character: state.character, sidebar: state.sidebar, prefixKeys: state.prefixKeys }),
     },
   ),
 );

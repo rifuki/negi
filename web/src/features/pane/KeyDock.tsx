@@ -7,7 +7,8 @@ import { KeyboardMenu } from "@/components/KeyboardMenu";
 import { SoftKeys } from "@/components/SoftKeys";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/Tip";
-import { upload, useAsk } from "@/connection/api";
+import { useAsk } from "@/connection/api";
+import { useSendFiles } from "./files";
 import { useApp } from "@/lib/store";
 import { isMod, take, useKeyboard, useMods } from "./mods";
 import { repeats } from "@/lib/repeat";
@@ -77,25 +78,8 @@ export function KeyDock({ pane }: { pane: string }) {
   const typing = useKeyboard((s) => s.typing);
   const soft = useKeyboard((s) => s.soft);
 
-  // A file from the phone is kept on the host, and its path is typed into the pane, with a
-  // space after it and no Enter: a path is something to say more about.
   const picker = useRef<HTMLInputElement>(null);
-  const [sending, setSending] = useState(false);
-  const attach = async (files: File[]) => {
-    if (!files.length) return;
-    setSending(true);
-    try {
-      for (const file of files) {
-        const path = await upload(file);
-        await ask.mutateAsync({ t: "text", pane, text: `${path} `, enter: false });
-      }
-      toast(files.length === 1 ? "Sent" : `${files.length} files sent`, { description: "The path is on the line" });
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSending(false);
-    }
-  };
+  const { send: attach, sending } = useSendFiles(pane);
 
   const send = (key: string) => {
     const out = take(key);

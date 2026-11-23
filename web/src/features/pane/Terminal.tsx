@@ -1,18 +1,21 @@
 // The open pane: its live screen, the history above it, and a hardware keyboard.
 
+import { useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDownIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, FileArrowUpIcon } from "@phosphor-icons/react";
 import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { hush, onScreen, request, screenOf } from "@/connection/link";
 import { calm } from "@/lib/anim";
 import { Pose } from "@/components/State";
 import { useApp } from "@/lib/store";
-import { findPane } from "@/tmux/tree";
+import { findPane, paneParam } from "@/tmux/tree";
 import { cn } from "@/lib/utils";
 import { columnWidth, paintRow } from "@/tmux/screen";
 import { useEarlier } from "./earlier";
+import { useSendFiles } from "./files";
 import { take, useKeyboard, useMods } from "./mods";
+import { prefixed, usePrefix } from "./prefix";
 
 const DESK_KEYS: Record<string, string> = {
   Enter: "Enter", Escape: "Escape", Tab: "Tab", Backspace: "BSpace", Delete: "DC",
@@ -199,8 +202,24 @@ export function Terminal({ pane }: { pane: string }) {
   }, [history]);
 
   /** A hardware keyboard, with the terminal focused: keys go straight to the pane. */
+  const navigate = useNavigate();
+  // A pane opened from the keyboard keeps the keyboard: the new terminal takes the focus.
+  useEffect(() => {
+    if (!usePrefix.getState().carry) return;
+    usePrefix.setState({ carry: false });
+    stage.current?.focus({ preventScroll: true });
+  }, []);
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.metaKey || e.nativeEvent.isComposing) return;
+    const go = (id: string) => {
+      if (id === pane) return;
+      usePrefix.setState({ carry: true });
+      void navigate({ to: "/pane/$pane", params: { pane: paneParam(id) } });
+    };
+    if (prefixed(e, pane, go)) {
+      e.preventDefault();
+      return;
+    }
     let key: string | null = DESK_KEYS[e.key] ?? (/^F\d{1,2}$/.test(e.key) ? e.key : null);
     if (key === "Tab" && e.shiftKey) key = "BTab";
     const printable = e.key.length === 1 && e.key !== " ";
@@ -313,8 +332,41 @@ export function Terminal({ pane }: { pane: string }) {
     toEnd();
   };
 
+  // Files dragged in from this computer, or pasted, are sent to the host as the attach button does.
+  const { send: sendFiles } = useSendFiles(pane);
+  const [dropping, setDropping] = useState(false);
+  const carriesFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = [...e.clipboardData.files];
+    const text = e.clipboardData.getData("text/plain");
+    if (!files.length && !text) return;
+    e.preventDefault();
+    if (files.length) void sendFiles(files);
+    else void send({ t: "text", pane, text, enter: false });
+    toEnd();
+  };
+
   return (
-    <div className={cn("relative flex min-h-0 flex-1 rounded-lg", live && "ring-2 ring-ring")}>
+    <div
+      className={cn("relative flex min-h-0 flex-1 rounded-lg", live && "ring-2 ring-ring")}
+      onDragOver={(e) => {
+        if (!carriesFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(e) => {
+        // Moving over a child is not leaving.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(e) => {
+        if (!carriesFiles(e)) return;
+        e.preventDefault();
+        setDropping(false);
+        void sendFiles([...e.dataTransfer.files]);
+        stage.current?.focus({ preventScroll: true });
+      }}
+    >
       <textarea
         ref={typist}
         aria-label="Type into the pane"
@@ -324,6 +376,7 @@ export function Terminal({ pane }: { pane: string }) {
         autoComplete="off"
         spellCheck={false}
         enterKeyHint="enter"
+        onPaste={onPaste}
         onFocus={() => useKeyboard.setState({ typing: true })}
         onBlur={() => useKeyboard.setState({ typing: false })}
         // While a word is being composed the field holds half of it; it is sent when it is whole.
@@ -348,6 +401,7 @@ export function Terminal({ pane }: { pane: string }) {
       }}
       aria-label="Terminal. Type here to send keys."
       onKeyDown={onKeyDown}
+      onPaste={onPaste}
       onScroll={(e) => {
         const el = e.currentTarget;
         const fromEnd = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -410,6 +464,13 @@ export function Terminal({ pane }: { pane: string }) {
         </p>
       )}
     </div>
+      {dropping && (
+        <div aria-hidden className="drop-zone pointer-events-none absolute inset-0 grid place-content-center justify-items-center gap-2 rounded-lg border-2 border-dashed border-primary bg-term/90 text-center text-term-fg">
+          <FileArrowUpIcon weight="duotone" size={44} className="text-primary" />
+          <p className="text-base font-semibold">Drop to send to your Mac</p>
+          <p className="text-sm opacity-70">Its path goes on the line, ready for the program</p>
+        </div>
+      )}
       {away && !dismissed && (
         <button
           type="button"

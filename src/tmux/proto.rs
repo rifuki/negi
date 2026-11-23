@@ -9,6 +9,8 @@ pub enum Notice {
     Tree,
     /// The client is now attached to this session.
     Moved(String),
+    /// A paste buffer was made or changed, by a program's OSC 52 or a copy in copy mode.
+    Buffer(String),
     /// The client is exiting.
     Exit,
 }
@@ -56,6 +58,7 @@ pub fn parse(line: &[u8]) -> Line<'_> {
             _ => Line::Ignored,
         },
         b"exit" => Line::Notice(Notice::Exit),
+        b"paste-buffer-changed" if !args.is_empty() => Line::Notice(Notice::Buffer(text(args))),
         b"sessions-changed"
         | b"session-renamed"
         | b"session-window-changed"
@@ -178,7 +181,10 @@ mod tests {
         assert_eq!(parse(b"%exit"), Line::Notice(Notice::Exit));
         assert_eq!(parse(b"%exit server exited"), Line::Notice(Notice::Exit));
         assert_eq!(parse(b"%client-detached /dev/ttys001"), Line::Ignored);
-        assert_eq!(parse(b"%paste-buffer-changed buffer0"), Line::Ignored);
+        assert_eq!(
+            parse(b"%paste-buffer-changed buffer0"),
+            Line::Notice(Notice::Buffer("buffer0".into()))
+        );
         assert_eq!(parse(b"hello"), Line::Text);
         assert_eq!(parse(b""), Line::Text);
     }

@@ -272,3 +272,27 @@ async fn a_window_made_after_joining_reports_its_output() {
         .await
         .expect("the new window's output reached the phone");
 }
+
+#[tokio::test]
+async fn a_copy_in_a_pane_reaches_the_phone_once() {
+    let s = Scratch::new();
+    let pane = s.session("work", "sh");
+    s.session("other", "cat");
+    s.run(&["set-option", "-s", "set-clipboard", "on"]);
+    let hub = Hub::start(s.tmux.clone(), QUICK);
+    let (_client, mut outbox) = hub.join().await.unwrap();
+    next(&mut outbox, "tree", |_| true).await;
+    stats_become(&hub, |st| st.links == 2).await;
+
+    // What nvim sends on a yank over OSC 52: "yanked" in base64.
+    let link = hub.link().await.unwrap();
+    mux::text_in(&link, &pane, r"printf '\033]52;c;eWFua2Vk\a'", true)
+        .await
+        .unwrap();
+    let copied = next(&mut outbox, "copied", |_| true).await;
+    assert_eq!(copied["text"], "yanked");
+
+    s.run(&["set-buffer", "second"]);
+    let copied = next(&mut outbox, "copied", |_| true).await;
+    assert_eq!(copied["text"], "second", "each control client hears of it, the phone once");
+}

@@ -2,6 +2,7 @@
 // retries, belong to react-use-websocket in components/Link.tsx; this file turns messages
 // into store updates, owns the live screens, and decides which panes the server sends.
 
+import { copied, typed } from "@/lib/clipboard";
 import { useApp } from "@/lib/store";
 import { type RowsMessage, Screen, type ScreenMessage } from "@/tmux/screen";
 import type { Session } from "@/tmux/tree";
@@ -54,6 +55,8 @@ export function request(message: object): Promise<Ack> {
       resolve: (value) => (clearTimeout(timeout), resolve(value)),
       reject: (error) => (clearTimeout(timeout), reject(error)),
     });
+    const t = (message as { t?: string }).t;
+    if (t === "keys" || t === "text") typed();
     sendNow({ ...message, id });
   });
 }
@@ -140,6 +143,7 @@ export type Incoming =
   | ({ t: "rows"; pane: string } & RowsMessage)
   | { t: "busy"; pane: string; on: boolean }
   | { t: "gone"; pane: string }
+  | { t: "copied"; text: string }
   | { t: "ack"; id: number; ok: boolean; error?: string; pane?: string; lines?: string[] };
 
 /** Called for every message the server sends. */
@@ -192,6 +196,9 @@ export function receive(msg: Incoming) {
       break;
     case "gone":
       screens.delete(msg.pane);
+      break;
+    case "copied":
+      void copied(msg.text);
       break;
     case "ack": {
       const waiter = waiting.get(msg.id);

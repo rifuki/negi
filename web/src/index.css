@@ -570,6 +570,20 @@
   }
 }
 
+/* The session list slides out of the way of an open pane and back. */
+@media (min-width: 64rem) {
+  .sidebar {
+    transition:
+      width 360ms cubic-bezier(0.32, 0.72, 0, 1),
+      border-color 360ms;
+  }
+  .sidebar > div {
+    transition:
+      transform 360ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 240ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

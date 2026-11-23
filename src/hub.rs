@@ -37,6 +37,8 @@ const BOOT_RETRY: Duration = Duration::from_secs(3);
 /// A pane counts as busy until it has printed nothing for this long.
 const QUIET: Duration = Duration::from_millis(2500);
 const MAX_LINKS: usize = 24;
+/// Every control client hears of the same new buffer; within this long it is one copy.
+const COPY_ECHO: Duration = Duration::from_millis(500);
 const CLIENT_QUEUE: usize = 256;
 
 #[derive(Debug, Clone, Copy)]
@@ -173,6 +175,8 @@ struct Actor {
     /// When each link attached, by its id, for [`Timing::attach_redraw`].
     attached: HashMap<u64, Instant>,
     booted: Option<Instant>,
+    /// The buffer last passed on, and when.
+    copied: Option<(String, Instant)>,
 }
 
 impl Actor {
@@ -196,6 +200,7 @@ impl Actor {
             awake: None,
             attached: HashMap::new(),
             booted: None,
+            copied: None,
         }
     }
 
@@ -210,7 +215,7 @@ impl Actor {
                     Some(cmd) => self.command(cmd).await,
                     None => return,
                 },
-                Some((link, notice)) = self.notices_rx.recv() => self.notice(link, notice),
+                Some((link, notice)) = self.notices_rx.recv() => self.notice(link, notice).await,
                 _ = tick.tick(), if ticking => self.tick().await,
             }
         }
@@ -301,7 +306,7 @@ impl Actor {
         }
     }
 
-    fn notice(&mut self, link: u64, notice: Notice) {
+    async fn notice(&mut self, link: u64, notice: Notice) {
         match notice {
             Notice::Output(pane) => {
                 let redraw = self.attached.get(&link).is_some_and(|at| at.elapsed() < self.timing.attach_redraw);
@@ -331,6 +336,18 @@ impl Actor {
                 if let Some(stray) = stray {
                     self.links.remove(&stray);
                     self.tree_dirty.get_or_insert_with(Instant::now);
+                }
+            }
+            Notice::Buffer(name) => {
+                if self.copied.as_ref().is_some_and(|(n, at)| *n == name && at.elapsed() < COPY_ECHO) {
+                    return;
+                }
+                self.copied = Some((name.clone(), Instant::now()));
+                let Some(link) = self.live_link().filter(|_| !self.clients.is_empty()) else {
+                    return;
+                };
+                if let Ok(Some(copied)) = mux::buffer(&link, &name).await {
+                    self.broadcast(text(&json!({ "t": "copied", "text": copied })));
                 }
             }
             Notice::Exit => {

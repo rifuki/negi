@@ -89,6 +89,18 @@ enum In {
         id: u64,
         pane: String,
     },
+    /// Move to the pane beside this one, as tmux's prefix and an arrow do.
+    SelectPane {
+        id: u64,
+        pane: String,
+        dir: String,
+    },
+    Split {
+        id: u64,
+        pane: String,
+        #[serde(default)]
+        across: bool,
+    },
     /// A tap on the pane, passed on as a mouse click to a program that takes the mouse.
     Click {
         id: u64,
@@ -422,6 +434,27 @@ async fn handle(
             (id, result)
         }
         In::Unfit { id, pane } => (id, let_go(app, &pane, client).await),
+        In::SelectPane { id, pane, dir } => (
+            id,
+            with_link(app, async |l| {
+                mux::select_pane(&l, &pane, &dir)
+                    .await
+                    .map(|p| json!({ "pane": p }))
+            })
+            .await,
+        ),
+        In::Split { id, pane, across } => {
+            app.store.audit(&device.id, &format!("split {pane}"));
+            (
+                id,
+                with_link(app, async |l| {
+                    mux::split(&l, &pane, across)
+                        .await
+                        .map(|p| json!({ "pane": p }))
+                })
+                .await,
+            )
+        }
         In::KillPane { id, pane } => {
             app.store.audit(&device.id, &format!("kill-pane {pane}"));
             (

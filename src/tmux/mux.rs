@@ -575,6 +575,53 @@ pub async fn unfit(link: &Link, pane: &str) -> Result<(), Error> {
         .map(drop)
 }
 
+/// Makes the pane beside `pane` in direction `dir` (`L`, `R`, `U` or `D`) the active one, as
+/// tmux's own prefix and arrow do, and answers with its id.
+pub async fn select_pane(link: &Link, pane: &str, dir: &str) -> Result<String, Error> {
+    need('%', pane)?;
+    if !matches!(dir, "L" | "R" | "U" | "D") {
+        return Err(Error::Invalid("not a direction"));
+    }
+    let window = text(&link.run(format!("display-message -p -t {pane} '#{{window_id}}'")).await?)
+        .trim()
+        .to_owned();
+    need('@', &window)?;
+    link.run(format!("select-pane -t {pane} -{dir}")).await?;
+    created(link.run(format!("display-message -p -t {window} '#{{pane_id}}'")).await?)
+}
+
+/// Splits `pane` in its own folder: side by side when `across`, otherwise one above the other.
+pub async fn split(link: &Link, pane: &str, across: bool) -> Result<String, Error> {
+    need('%', pane)?;
+    let side = if across { "-h" } else { "-v" };
+    created(
+        link.run(format!(
+            "split-window {side} -P -F '#{{pane_id}}' -t {pane} -c '#{{pane_current_path}}'"
+        ))
+        .await?,
+    )
+}
+
+/// The largest copy passed on to a phone; a bigger one is left on the host.
+const MAX_COPY: usize = 256 * 1024;
+
+/// A paste buffer's text, or `None` when it is too large to pass on.
+pub async fn buffer(link: &Link, name: &str) -> Result<Option<String>, Error> {
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')) {
+        return Ok(None);
+    }
+    let body = link.run(format!("show-buffer -b {name}")).await?;
+    if body.len() > MAX_COPY {
+        return Ok(None);
+    }
+    let mut text = String::from_utf8_lossy(&body).into_owned();
+    // A reply block ends every line with a newline, the buffer's last one included.
+    if text.ends_with('\n') {
+        text.pop();
+    }
+    Ok(Some(text))
+}
+
 pub async fn kill_pane(link: &Link, pane: &str) -> Result<(), Error> {
     need('%', pane)?;
     link.run(format!("kill-pane -t {pane}")).await.map(drop)

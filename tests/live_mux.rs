@@ -205,7 +205,19 @@ async fn nothing_but_ids_and_key_names_reaches_tmux() {
             mux::kill_pane(&link, target).await,
             Err(Error::Invalid(_))
         ));
+        assert!(matches!(
+            mux::split(&link, target, true).await,
+            Err(Error::Invalid(_))
+        ));
+        assert!(matches!(
+            mux::select_pane(&link, target, "L").await,
+            Err(Error::Invalid(_))
+        ));
     }
+    assert!(matches!(
+        mux::select_pane(&link, &pane, "L; kill-server").await,
+        Err(Error::Invalid(_))
+    ));
     for key in ["Enter; kill-server", "kill-server", "C-", ""] {
         assert!(
             matches!(
@@ -469,4 +481,24 @@ async fn a_full_screen_program_is_told_apart_from_a_shell() {
         );
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
     }
+}
+
+#[tokio::test]
+async fn split_then_move_between_the_two_panes() {
+    let s = Scratch::new();
+    let left = s.session("work", "cat");
+    let link = s.link().await;
+
+    let right = mux::split(&link, &left, true).await.unwrap();
+    assert_ne!(right, left);
+    let layout = s.run(&["list-panes", "-t", "work", "-F", "#{pane_id} #{pane_left}"]);
+    assert!(
+        layout.lines().any(|l| l.starts_with(&format!("{right} ")) && !l.ends_with(" 0")),
+        "the new pane sits to the right: {layout}"
+    );
+    assert_eq!(mux::select_pane(&link, &right, "L").await.unwrap(), left);
+    assert_eq!(mux::select_pane(&link, &left, "R").await.unwrap(), right);
+
+    let below = mux::split(&link, &right, false).await.unwrap();
+    assert_eq!(mux::select_pane(&link, &below, "U").await.unwrap(), right);
 }
