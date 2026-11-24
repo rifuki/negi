@@ -296,3 +296,34 @@ async fn a_copy_in_a_pane_reaches_the_phone_once() {
     let copied = next(&mut outbox, "copied", |_| true).await;
     assert_eq!(copied["text"], "second", "each control client hears of it, the phone once");
 }
+
+/// Reads what the terminal answers to `ask`, sent wrapped for the terminal outside tmux.
+const ASK: &str = r#"stty raw -echo; printf '\033Ptmux;\033\033[0c\033\\'; a=$(dd bs=1 count=9 2>/dev/null | od -An -c | tr -d ' \n'); stty sane; echo "GOT$a""#;
+
+async fn screen_shows(s: &Scratch, pane: &str, want: &str) -> String {
+    for _ in 0..60 {
+        let screen = s.run(&["capture-pane", "-p", "-t", pane]);
+        if screen.contains(want) {
+            return screen;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    s.run(&["capture-pane", "-p", "-t", pane])
+}
+
+#[tokio::test]
+async fn a_question_for_the_outer_terminal_is_answered_when_none_shows_the_pane() {
+    let s = Scratch::new();
+    let pane = s.session("work", "sh");
+    s.run(&["set-option", "-g", "allow-passthrough", "on"]);
+    let hub = Hub::start(s.tmux.clone(), QUICK);
+    let (_client, mut outbox) = hub.join().await.unwrap();
+    next(&mut outbox, "tree", |_| true).await;
+    stats_become(&hub, |st| st.links == 1).await;
+
+    // yazi asks this way inside tmux, and waits a second for the answer before drawing.
+    let link = hub.link().await.unwrap();
+    mux::text_in(&link, &pane, ASK, true).await.unwrap();
+    let screen = screen_shows(&s, &pane, "GOT033[?62;22c").await;
+    assert!(screen.contains("GOT033[?62;22c"), "{screen}");
+}

@@ -1,6 +1,6 @@
 {
   "name": "@rifuki/negi",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "description": "tmux and your Mac's screen, on your phone, over your tailnet.",
   "license": "MIT",
   "homepage": "https://github.com/rifuki/negi",

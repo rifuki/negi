@@ -308,20 +308,13 @@ impl Actor {
 
     async fn notice(&mut self, link: u64, notice: Notice) {
         match notice {
-            Notice::Output(pane) => {
-                let redraw = self.attached.get(&link).is_some_and(|at| at.elapsed() < self.timing.attach_redraw);
-                if !redraw && self.busy.insert(pane.clone(), Instant::now()).is_none() {
-                    self.broadcast(text(&json!({ "t": "busy", "pane": pane, "on": true })));
+            Notice::Asked(pane, asks) => {
+                if let Some(link) = self.links.values().find(|l| l.id() == link).cloned() {
+                    let _ = mux::answer(&link, &pane, &asks).await;
                 }
-                if let Some(watched) = self.panes.get_mut(&pane) {
-                    let now = Instant::now();
-                    if !watched.dirty {
-                        watched.since = now;
-                    }
-                    watched.heard = now;
-                    watched.dirty = true;
-                }
+                self.heard(link, pane);
             }
+            Notice::Output(pane) => self.heard(link, pane),
             Notice::Tree => {
                 self.tree_dirty.get_or_insert_with(Instant::now);
             }
@@ -354,6 +347,22 @@ impl Actor {
                 self.links.retain(|_, l| l.id() != link);
                 self.tree_dirty.get_or_insert_with(Instant::now);
             }
+        }
+    }
+
+    /// A pane wrote to its screen.
+    fn heard(&mut self, link: u64, pane: String) {
+        let redraw = self.attached.get(&link).is_some_and(|at| at.elapsed() < self.timing.attach_redraw);
+        if !redraw && self.busy.insert(pane.clone(), Instant::now()).is_none() {
+            self.broadcast(text(&json!({ "t": "busy", "pane": pane, "on": true })));
+        }
+        if let Some(watched) = self.panes.get_mut(&pane) {
+            let now = Instant::now();
+            if !watched.dirty {
+                watched.since = now;
+            }
+            watched.heard = now;
+            watched.dirty = true;
         }
     }
 

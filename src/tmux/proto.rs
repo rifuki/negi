@@ -5,6 +5,9 @@
 pub enum Notice {
     /// A pane wrote to its screen, or entered or left a mode.
     Output(String),
+    /// A pane wrote to its screen and, inside that output, asked the terminal outside tmux a
+    /// question through passthrough. Only a terminal showing the pane's window receives it.
+    Asked(String, Vec<Ask>),
     /// Sessions, windows or panes were created, closed, renamed or rearranged.
     Tree,
     /// The client is now attached to this session.
@@ -13,6 +16,26 @@ pub enum Notice {
     Buffer(String),
     /// The client is exiting.
     Exit,
+}
+
+/// A question a program sends the outer terminal wrapped in `ESC P tmux;`, as yazi does at
+/// start: it waits for the answer before drawing anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ask {
+    /// Primary device attributes, `CSI c` or `CSI 0 c`.
+    Attributes,
+    /// Device status, `CSI 5 n`.
+    Status,
+}
+
+impl Ask {
+    pub fn answer(self) -> &'static [u8] {
+        match self {
+            // A VT220 with colour, and no sixel or other graphics the browser could not draw.
+            Ask::Attributes => b"\x1b[?62;22c",
+            Ask::Status => b"\x1b[0n",
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -50,9 +73,14 @@ pub fn parse(line: &[u8]) -> Line<'_> {
         },
         b"end" => Line::End { tag: args },
         b"error" => Line::Error { tag: args },
-        b"output" | b"pane-mode-changed" => pane(split(args).0),
-        // `%extended-output %1 <age> ... : value`
-        b"extended-output" => pane(split(args).0),
+        b"output" | b"extended-output" => {
+            let (id, data) = split(args);
+            match (pane(id), asks(data)) {
+                (Line::Notice(Notice::Output(p)), a) if !a.is_empty() => Line::Notice(Notice::Asked(p, a)),
+                (line, _) => line,
+            }
+        }
+        b"pane-mode-changed" => pane(split(args).0),
         b"session-changed" => match split(args).0 {
             id if id.starts_with(b"$") => Line::Notice(Notice::Moved(text(id))),
             _ => Line::Ignored,
@@ -97,6 +125,31 @@ fn pane(id: &[u8]) -> Line<'static> {
     } else {
         Line::Ignored
     }
+}
+
+/// The passthrough questions in a line of output, still in control mode's octal escapes, where
+/// ESC is `\033` and a passthrough ends with `ESC \`. A question split across two lines is
+/// missed; programs write each one whole.
+fn asks(data: &[u8]) -> Vec<Ask> {
+    const OPEN: &[u8] = b"\\033Ptmux;";
+    const CLOSE: &[u8] = b"\\033\\134";
+    let mut found = Vec::new();
+    let mut rest = data;
+    while let Some(at) = find(rest, OPEN) {
+        rest = &rest[at + OPEN.len()..];
+        let Some(end) = find(rest, CLOSE) else { break };
+        match &rest[..end] {
+            b"\\033\\033[c" | b"\\033\\033[0c" => found.push(Ask::Attributes),
+            b"\\033\\033[5n" => found.push(Ask::Status),
+            _ => {}
+        }
+        rest = &rest[end + CLOSE.len()..];
+    }
+    found
+}
+
+fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
 }
 
 fn text(b: &[u8]) -> String {
@@ -155,6 +208,24 @@ mod tests {
             Line::Notice(Notice::Output("%4".into()))
         );
         assert_eq!(parse(b"%output"), Line::Ignored);
+    }
+
+    #[test]
+    fn passthrough_questions_are_picked_out_of_output() {
+        // What yazi writes at start, as tmux escapes it for a control client.
+        let yazi = b"%output %5 \\0337\\033Ptmux;\\033\\033[>q\\033\\134\\033[16t\\033]11;?\\007\\033Ptmux;\\033\\033[0c\\033\\134\\0338";
+        assert_eq!(parse(yazi), Line::Notice(Notice::Asked("%5".into(), vec![Ask::Attributes])));
+        assert_eq!(
+            parse(b"%output %5 \\033Ptmux;\\033\\033[5n\\033\\134"),
+            Line::Notice(Notice::Asked("%5".into(), vec![Ask::Status]))
+        );
+        assert_eq!(
+            parse(b"%extended-output %5 9 : \\033Ptmux;\\033\\033[c\\033\\134\\033Ptmux;\\033\\033[5n\\033\\134"),
+            Line::Notice(Notice::Asked("%5".into(), vec![Ask::Attributes, Ask::Status]))
+        );
+        // Asked plainly, tmux answers it itself; and a pane may print the words.
+        assert_eq!(parse(b"%output %5 \\033[0c"), Line::Notice(Notice::Output("%5".into())));
+        assert_eq!(parse(b"%output %5 Ptmux;[0c"), Line::Notice(Notice::Output("%5".into())));
     }
 
     #[test]

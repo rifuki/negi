@@ -7,6 +7,7 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::tmux::link::{Error, Link};
+use crate::tmux::proto::Ask;
 use crate::tmux::{Tmux, is_id, quote};
 
 /// Unit separator between listing fields. tmux passes it through untouched under `-u`.
@@ -620,6 +621,23 @@ pub async fn buffer(link: &Link, name: &str) -> Result<Option<String>, Error> {
         text.pop();
     }
     Ok(Some(text))
+}
+
+/// Answers what `pane` asked the terminal outside tmux, unless a terminal shows its window and
+/// so got the question itself. Returns whether negi answered.
+pub async fn answer(link: &Link, pane: &str, asks: &[Ask]) -> Result<bool, Error> {
+    need('%', pane)?;
+    let window = text(&link.run(format!("display-message -p -t {pane} '#{{window_id}}'")).await?)
+        .trim()
+        .to_owned();
+    need('@', &window)?;
+    let clients = text(&link.run("list-clients -F '#{client_control_mode} #{window_id}'".into()).await?);
+    if clients.lines().any(|l| l == format!("0 {window}")) {
+        return Ok(false);
+    }
+    let hex: Vec<String> = asks.iter().flat_map(|a| a.answer()).map(|b| format!("{b:02x}")).collect();
+    link.run(format!("send-keys -t {pane} -H {}", hex.join(" "))).await?;
+    Ok(true)
 }
 
 pub async fn kill_pane(link: &Link, pane: &str) -> Result<(), Error> {
